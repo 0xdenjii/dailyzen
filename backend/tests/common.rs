@@ -1,6 +1,6 @@
 use backend::config::{get_config, Settings};
 use backend::state::AppState;
-use backend::{tasks, users};
+use backend::{entries, tasks, users};
 use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use tokio::net::TcpListener;
@@ -89,7 +89,9 @@ pub async fn spawn_app() -> TestApp {
 
     let app = Router::new()
         .nest("/api/v1", users::router::create_router(app_state.clone()))
-        .nest("/api/v1/tasks", tasks::router::create_router(app_state.clone()));
+        .nest("/api/v1/tasks", tasks::router::create_router(app_state.clone()))
+        .nest("/api/v1/entries", entries::router::create_router(app_state.clone()));
+
 
     tokio::spawn(async move {
         axum::serve(listener, app)

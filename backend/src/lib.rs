@@ -4,6 +4,7 @@ pub mod errors;
 pub mod state;
 pub mod tasks;
 pub mod users;
+pub mod entries;
 
 use axum::{routing::get, Json, Router};
 use state::AppState;
@@ -51,6 +52,7 @@ pub async fn run() -> Result<(), errors::AppError> {
         .route("/", get(health_check_handler))
         .nest("/api/v1", users::router::create_router(app_state.clone()))
         .nest("/api/v1/tasks", tasks::router::create_router(app_state.clone()))
+        .nest("/api/v1/entries", entries::router::create_router(app_state.clone()))
         .layer(cors)
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
