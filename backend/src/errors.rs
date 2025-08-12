@@ -36,6 +36,10 @@ pub enum AppError {
     #[error("User not found")]
     UserNotFound,
 
+     // --- RESOURCE ---
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     // --- OTHER ---
     #[error("Validation error: {0}")]
     Validation(#[from] validator::ValidationErrors),
@@ -76,6 +80,7 @@ impl IntoResponse for AppError {
             AppError::TokenExpired => (StatusCode::UNAUTHORIZED, self.to_string()),
             AppError::UserNotFound => (StatusCode::NOT_FOUND, self.to_string()),
             AppError::UserAlreadyExists => (StatusCode::CONFLICT, self.to_string()),
+            AppError::NotFound(message) => (StatusCode::NOT_FOUND, message),
             _ => {
                 tracing::error!("Internal server error: {:?}", self);
                 (
