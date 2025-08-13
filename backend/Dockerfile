@@ -1,31 +1,36 @@
 # --- Stage 1: The Builder ---
 FROM rust:1.80-slim-bullseye AS builder
 
-WORKDIR /app
+# MODIFIED: Install build tools and postgresql-client FIRST, in a clean environment.
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev postgresql-client && rm -rf /var/lib/apt/lists/*
 
-# Install necessary build dependencies and sqlx-cli
-# MODIFIED: Pin sqlx-cli to a version compatible with Rust 1.80's stable toolchain.
-RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev && \
-    cargo install sqlx-cli --version 0.7.4 --force
+# MODIFIED: Install the sqlx-cli tool BEFORE any project code is copied.
+# We pin the version for stable, repeatable builds.
+RUN cargo install sqlx-cli --version 0.7.4 --force
+
+WORKDIR /app
 
 # This build argument is passed from our `publish.yml` workflow.
 ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
-# Create a dummy project to cache dependencies from the backend.
+# --- Dependency Caching Layer ---
+# Now, copy the Cargo files to cache dependencies.
 COPY backend/Cargo.toml backend/Cargo.lock ./
+# Create a dummy project to build and cache only the dependencies.
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
     cargo build --release && \
     rm -rf src target/release/deps/backend*
 
-# Copy the entire backend source code, migrations, and config
+# --- Application Build Layer ---
+# Copy the rest of the application source code.
 COPY backend/ .
 
-# Generate the `.sqlx` directory. This step allows the final
-# build to succeed without a live database connection.
-# Ensure the database is ready before running this.
-RUN until pg_isready -h localhost -p 5432; do echo "Waiting for database..."; sleep 2; done; \
+# Ensure the database is ready before running prepare.
+# The postgres service in your workflow needs time to start.
+# Note: This requires the `DATABASE_URL` build-arg to be set.
+RUN until pg_isready --host=postgres --username=user --dbname=dailyzen; do echo "Waiting for database..."; sleep 2; done && \
     cargo sqlx prepare
 
 # Build the final release binary.
