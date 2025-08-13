@@ -1,5 +1,5 @@
 # --- Stage 1: The Builder ---
-FROM rust:1.78-slim-bullseye AS builder
+FROM rust:1.79-slim-bullseye AS builder
 
 WORKDIR /app
 
