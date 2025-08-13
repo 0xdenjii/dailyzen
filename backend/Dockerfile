@@ -30,7 +30,7 @@ RUN mkdir src && \
 COPY backend/ .
 
 # Use the globally installed `sqlx` command.
-RUN sqlx prepare
+RUN cargo sqlx prepare
 
 # Build the final release binary. This still uses the nightly compiler, but
 # the output binary is self-contained and does not require nightly to run.

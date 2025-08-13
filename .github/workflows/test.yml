@@ -54,7 +54,7 @@ jobs:
       - name: Run Migrations
         working-directory: ./backend
         # We use the globally installed `sqlx` command.
-        run: sqlx migrate run
+        run: cargo sqlx migrate run
         env:
           DATABASE_URL: "postgres://user:password@localhost:5432/dailyzen"
 
