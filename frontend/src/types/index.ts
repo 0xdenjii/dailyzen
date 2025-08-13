@@ -1,5 +1,7 @@
 // TypeScript interfaces for the Self-Development App
 
+
+
 export interface Task {
   id: string;
   name: string;

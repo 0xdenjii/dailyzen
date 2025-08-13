@@ -10,6 +10,13 @@ export default defineConfig(({ mode }) => ({
     watch: {
       usePolling: true,
     },
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8000", // Your Rust backend's address
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, "/api/v1"), // Optional: if you want to use /api in frontend calls
+      },
+    },
   },
   plugins: [
     react(),
@@ -19,4 +26,5 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  
 }));
