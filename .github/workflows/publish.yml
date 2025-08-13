@@ -15,19 +15,7 @@ jobs:
     name: Build and Push Backend Image to GHCR
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dailyzen
-        # We give the service a network alias `postgres`
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # The `services` block is NO LONGER NEEDED for this job and has been removed.
 
     steps:
       - name: Checkout repository
@@ -50,9 +38,3 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/dailyzen:latest
-          build-args: |
-            # --- THIS IS THE CRITICAL FIX ---
-            # Inside the Docker build, the service container is NOT on `localhost`.
-            # By default, Docker gives it a hostname equal to the service name: `postgres`.
-            # We must use that hostname to connect. The port is the internal Docker port.
-            DATABASE_URL=postgres://user:password@postgres:5432/dailyzen

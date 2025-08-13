@@ -1,23 +1,18 @@
 # --- Stage 1: The Builder ---
-# We start with a stable base image that includes `rustup`.
+# We use bookworm as it has a more modern toolchain ecosystem.
 FROM rust:1.80-bookworm AS builder
 
-# Install necessary OS-level dependencies.
-RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev
+# Install build tools, the postgresql client AND the postgresql server.
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev postgresql postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
 
-# --- THIS IS THE DEFINITIVE FIX ---
-# Use rustup to install the nightly toolchain and set it as the default.
-# The nightly version of `cargo` understands the `edition2024` feature flag.
+# Use rustup to switch to nightly, which is required to parse modern crate manifests.
 RUN rustup install nightly && rustup default nightly
 
-# Now, install our tools using the working nightly cargo. We pin the version for stability.
+# Install the pinned version of sqlx-cli.
 RUN cargo install sqlx-cli --version 0.7.4 --locked
 
 WORKDIR /app
-
-# This build argument is passed from our `publish.yml` workflow.
-ARG DATABASE_URL
-ENV DATABASE_URL=${DATABASE_URL}
 
 # --- Dependency Caching Layer ---
 COPY backend/Cargo.toml backend/Cargo.lock ./
@@ -29,15 +24,28 @@ RUN mkdir src && \
 # --- Application Build Layer ---
 COPY backend/ .
 
-# Use the globally installed `sqlx` command.
-RUN cargo sqlx prepare
+# --- THIS IS THE DEFINITIVE FIX ---
+# This single RUN command creates a self-contained environment for `sqlx prepare`.
+RUN \
+    # Start a temporary, local PostgreSQL server.
+    service postgresql start && \
+    # Create a user and database for the check.
+    sudo -u postgres psql -c "CREATE USER user WITH PASSWORD 'password';" && \
+    sudo -u postgres psql -c "CREATE DATABASE dailyzen OWNER user;" && \
+    # Set the DATABASE_URL for the following commands.
+    export DATABASE_URL="postgres://user:password@localhost:5432/dailyzen" && \
+    # Run migrations against the temporary local database.
+    sqlx migrate run && \
+    # Run the prepare command, which now has a database to connect to.
+    cargo sqlx prepare && \
+    # Stop the temporary server.
+    service postgresql stop
 
-# Build the final release binary. This still uses the nightly compiler, but
-# the output binary is self-contained and does not require nightly to run.
+# Build the final release binary.
 RUN cargo build --release
 
 # --- Stage 2: The Runner ---
-# The final image is based on stable Debian, NOT nightly. It's small and secure.
+# The runner is a minimal, secure image without the build tools or database.
 FROM debian:bookworm-slim AS runner
 
 RUN apt-get update && apt-get install -y --no-install-recommends libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
