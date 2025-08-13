@@ -1,9 +1,11 @@
 # --- Stage 1: The Builder ---
-# We can use a specific stable version now without worrying about `cargo` compatibility.
-FROM rust:1.79-slim-bullseye AS builder
+# THIS IS THE KEY CHANGE: Use the `bookworm` variant, which has a newer, compatible toolchain.
+FROM rust:1.80-slim-bookworm AS builder
 
-# Install only the necessary OS-level dependencies.
-RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev
+# Install build tools and sqlx-cli in a single, efficient layer.
+# We pin the version for stable, repeatable builds.
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev && \
+    cargo install sqlx-cli --version 0.7.4 --locked
 
 WORKDIR /app
 
@@ -13,19 +15,16 @@ ENV DATABASE_URL=${DATABASE_URL}
 
 # --- Dependency Caching Layer ---
 COPY backend/Cargo.toml backend/Cargo.lock ./
-# Add the dummy project to build and cache only the dependencies.
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
     cargo build --release && \
     rm -rf src target/release/deps/backend*
 
 # --- Application Build Layer ---
-# Copy the entire backend source code.
 COPY backend/ .
 
-# Generate the `.sqlx` directory using the project's locked version of sqlx-cli.
-# This is the core of the new, robust strategy.
-RUN cargo sqlx prepare
+# Now we use the globally installed `sqlx` command.
+RUN sqlx prepare
 
 # Build the final release binary.
 RUN cargo build --release
