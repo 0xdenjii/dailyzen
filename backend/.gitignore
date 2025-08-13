@@ -7,4 +7,4 @@
 # Editor-specific files
 .idea/
 .vscode/
-config.toml
+# config.toml

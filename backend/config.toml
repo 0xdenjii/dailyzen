@@ -1,0 +1,10 @@
+application_port = 8000
+jwt_secret = "default-dev-secret-that-is-very-long-and-random"
+
+[database]
+host = "127.0.0.1"
+port = 5432
+username = "user"
+password = "password"
+db_name = "dailyzen"
+ssl_mode = false
