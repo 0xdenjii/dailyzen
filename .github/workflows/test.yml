@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Cache cargo dependencies
-        uses: actions/cache@vv4
+        uses: actions/cache@v4
         with:
           path: |
             backend/target/
