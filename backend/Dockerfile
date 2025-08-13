@@ -1,14 +1,22 @@
 # --- Stage 1: The Builder ---
-# We still use a recent stable version as the base
+# Use a stable, recent Rust version as our base.
 FROM rust:1.80-slim-bullseye AS builder
 
-# Install build tools and the postgresql client for the pg_isready check
-RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev postgresql-client && rm -rf /var/lib/apt/lists/*
+# MODIFICATION: Install tools needed for downloading and extracting.
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    postgresql-client \
+    curl \
+    tar \
+    && rm -rf /var/lib/apt/lists/*
 
-# MODIFIED: Switch to the nightly toolchain and install the latest sqlx-cli
-# This permanently solves the "edition2024" feature error.
-RUN rustup default nightly && \
-    cargo install sqlx-cli --force
+# --- THE FIX: Download the pre-compiled binary for sqlx-cli ---
+# We specify the exact version and architecture for a reproducible build.
+# The 'musl' version is statically linked and perfect for Docker.
+RUN curl -L "https://github.com/launchbadge/sqlx/releases/download/v0.7.4/sqlx-cli-v0.7.4-x86_64-unknown-linux-musl.tar.gz" \
+    | tar xz -C /usr/local/bin
 
 WORKDIR /app
 
@@ -17,7 +25,7 @@ ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
 # --- Dependency Caching Layer ---
-# This part remains the same. It caches your project's dependencies.
+# This remains the same. It builds and caches your project's dependencies.
 COPY backend/Cargo.toml backend/Cargo.lock ./
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
@@ -28,8 +36,7 @@ RUN mkdir src && \
 # Copy the rest of the application source code.
 COPY backend/ .
 
-# Ensure the database is ready before running prepare.
-# Note the use of the service hostname 'postgres'.
+# Ensure the database service is ready before running prepare.
 RUN until pg_isready --host=postgres --username=user --dbname=dailyzen; do echo "Waiting for database..."; sleep 2; done && \
     cargo sqlx prepare
 
