@@ -1,20 +1,12 @@
 # --- Stage 1: The Builder ---
-# Use a stable, recent Rust version as our base.
 FROM rust:1.80-slim-bullseye AS builder
 
-# Install build/download tools.
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    pkg-config \
-    libssl-dev \
-    postgresql-client \
-    curl \
-    tar \
-    && rm -rf /var/lib/apt/lists/*
+# MODIFIED: Install build tools and postgresql-client FIRST, in a clean environment.
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev postgresql-client && rm -rf /var/lib/apt/lists/*
 
-# --- THE FIX: Download the pre-compiled binary using the VERIFIED CORRECT URL ---
-RUN curl -fSL "https://github.com/launchbadge/sqlx/archive/refs/tags/v0.7.4.tar.gz" \
-    | tar xz -C /usr/local/bin
+# MODIFIED: Install the sqlx-cli tool BEFORE any project code is copied.
+# We pin the version for stable, repeatable builds.
+RUN cargo install sqlx-cli --version 0.7.4 --force
 
 WORKDIR /app
 
@@ -23,8 +15,9 @@ ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
 # --- Dependency Caching Layer ---
-# This builds and caches your project's dependencies.
+# Now, copy the Cargo files to cache dependencies.
 COPY backend/Cargo.toml backend/Cargo.lock ./
+# Create a dummy project to build and cache only the dependencies.
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
     cargo build --release && \
@@ -34,7 +27,9 @@ RUN mkdir src && \
 # Copy the rest of the application source code.
 COPY backend/ .
 
-# Ensure the database service is ready before running prepare.
+# Ensure the database is ready before running prepare.
+# The postgres service in your workflow needs time to start.
+# Note: This requires the `DATABASE_URL` build-arg to be set.
 RUN until pg_isready --host=postgres --username=user --dbname=dailyzen; do echo "Waiting for database..."; sleep 2; done && \
     cargo sqlx prepare
 
@@ -46,11 +41,15 @@ FROM debian:bookworm-slim AS runner
 
 RUN apt-get update && apt-get install -y --no-install-recommends libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
 
+# Create a non-root user for security.
 RUN useradd --create-home appuser
 USER appuser
 WORKDIR /home/appuser
 
+# Copy the compiled binary from the builder stage.
 COPY --from=builder /app/target/release/backend .
+
+# Copy the configuration and migration files needed at runtime.
 COPY --from=builder /app/config.toml .
 COPY --from=builder /app/migrations ./migrations
 
