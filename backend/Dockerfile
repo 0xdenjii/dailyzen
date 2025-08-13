@@ -1,12 +1,11 @@
 # --- Stage 1: The Builder ---
-# We use bookworm as it has a more modern toolchain ecosystem.
 FROM rust:1.80-bookworm AS builder
 
-# Install build tools, the postgresql client AND the postgresql server.
-RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev postgresql postgresql-client && \
+# Install build tools and the postgresql server/client.
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev postgresql && \
     rm -rf /var/lib/apt/lists/*
 
-# Use rustup to switch to nightly, which is required to parse modern crate manifests.
+# Use rustup to switch to nightly to handle modern crate manifests.
 RUN rustup install nightly && rustup default nightly
 
 # Install the pinned version of sqlx-cli.
@@ -29,14 +28,12 @@ COPY backend/ .
 RUN \
     # Start a temporary, local PostgreSQL server.
     service postgresql start && \
-    # Create a user and database for the check.
-    sudo -u postgres psql -c "CREATE USER user WITH PASSWORD 'password';" && \
-    sudo -u postgres psql -c "CREATE DATABASE dailyzen OWNER user;" && \
-    # Set the DATABASE_URL for the following commands.
+    # Create a user and database using `su` because we are running as root.
+    su - postgres -c "psql -c \"CREATE USER user WITH PASSWORD 'password';\"" && \
+    su - postgres -c "psql -c \"CREATE DATABASE dailyzen OWNER user;\"" && \
+    # Set the DATABASE_URL and run migrations and prepare.
     export DATABASE_URL="postgres://user:password@localhost:5432/dailyzen" && \
-    # Run migrations against the temporary local database.
     sqlx migrate run && \
-    # Run the prepare command, which now has a database to connect to.
     cargo sqlx prepare && \
     # Stop the temporary server.
     service postgresql stop
@@ -45,7 +42,6 @@ RUN \
 RUN cargo build --release
 
 # --- Stage 2: The Runner ---
-# The runner is a minimal, secure image without the build tools or database.
 FROM debian:bookworm-slim AS runner
 
 RUN apt-get update && apt-get install -y --no-install-recommends libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
