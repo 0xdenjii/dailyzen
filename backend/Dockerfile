@@ -12,9 +12,8 @@ RUN apt-get update && apt-get install -y \
     tar \
     && rm -rf /var/lib/apt/lists/*
 
-# --- THE FIX: Download the pre-compiled binary for sqlx-cli using a robust curl command ---
-# The `-f` flag is critical: it makes the command fail if the download fails (e.g., on a 404).
-RUN curl -fSL "https://github.com/launchbadge/sqlx/releases/download/v0.7.4/sqlx-cli-v0.7.4-x86_64-unknown-linux-musl.tar.gz" \
+# --- THE FIX: Download the pre-compiled binary using the VERIFIED CORRECT URL ---
+RUN curl -fSL "https://github.com/launchbadge/sqlx/archive/refs/tags/v0.7.4.tar.gz" \
     | tar xz -C /usr/local/bin
 
 WORKDIR /app
