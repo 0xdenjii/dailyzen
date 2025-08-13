@@ -2,7 +2,7 @@
 # Use a stable, recent Rust version as our base.
 FROM rust:1.80-slim-bullseye AS builder
 
-# MODIFICATION: Install tools needed for downloading and extracting.
+# Install build/download tools.
 RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
@@ -12,10 +12,9 @@ RUN apt-get update && apt-get install -y \
     tar \
     && rm -rf /var/lib/apt/lists/*
 
-# --- THE FIX: Download the pre-compiled binary for sqlx-cli ---
-# We specify the exact version and architecture for a reproducible build.
-# The 'musl' version is statically linked and perfect for Docker.
-RUN curl -L "https://github.com/launchbadge/sqlx/releases/download/v0.7.4/sqlx-cli-v0.7.4-x86_64-unknown-linux-musl.tar.gz" \
+# --- THE FIX: Download the pre-compiled binary for sqlx-cli using a robust curl command ---
+# The `-f` flag is critical: it makes the command fail if the download fails (e.g., on a 404).
+RUN curl -fSL "https://github.com/launchbadge/sqlx/releases/download/v0.7.4/sqlx-cli-v0.7.4-x86_64-unknown-linux-musl.tar.gz" \
     | tar xz -C /usr/local/bin
 
 WORKDIR /app
@@ -25,7 +24,7 @@ ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
 # --- Dependency Caching Layer ---
-# This remains the same. It builds and caches your project's dependencies.
+# This builds and caches your project's dependencies.
 COPY backend/Cargo.toml backend/Cargo.lock ./
 RUN mkdir src && \
     echo "fn main() {}" > src/main.rs && \
