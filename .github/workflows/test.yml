@@ -1,0 +1,64 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ "**" ] # All branches
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+    
+    # We need a PostgreSQL database to run our integration tests.
+    # This "service container" provides a temporary, clean database for each run.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dailyzen
+        ports:
+          - 5432:5432
+        # Health check ensures the database is ready before tests start.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache cargo dependencies
+        # Caching dependencies speeds up the workflow significantly on subsequent runs.
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli
+
+      - name: Run Migrations
+        # The DATABASE_URL must point to the service container we defined above.
+        run: sqlx migrate run
+        env:
+          DATABASE_URL: "postgres://user:password@localhost:5432/dailyzen"
+
+      - name: Run Tests
+        # The tests also need the same DATABASE_URL to connect to the service container.
+        run: cargo test --all-targets --all-features
+        env:
+          DATABASE_URL: "postgres://user:password@localhost:5432/dailyzen"
