@@ -6,6 +6,7 @@ use axum::{
 use serde_json::json;
 use thiserror::Error;
 use bcrypt::BcryptError;
+use tokio_cron_scheduler::JobSchedulerError;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -43,12 +44,24 @@ pub enum AppError {
     // --- OTHER ---
     #[error("Validation error: {0}")]
     Validation(#[from] validator::ValidationErrors),
+
+    #[error("Scheduler error: {0}")]
+    JobScheduler(#[from] JobSchedulerError),
+
    
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
+            AppError::JobScheduler(e) => {
+                tracing::error!("Scheduler error: {:?}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "An internal scheduler error occurred".to_string(),
+                )
+            }
+
             AppError::Sqlx(e) => {
                 tracing::error!("Database error: {:?}", e);
                 (

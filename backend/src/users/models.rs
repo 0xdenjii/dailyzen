@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 
 // The complete User model, mapping to the database table
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -15,6 +15,7 @@ pub struct User {
     pub total_points: i64,
     pub current_streak: i32,
     pub longest_streak: i32,
+    pub last_entry_date: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

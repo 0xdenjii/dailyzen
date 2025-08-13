@@ -1,17 +1,25 @@
+pub mod analytics;
 pub mod auth;
 pub mod config;
+pub mod entries;
 pub mod errors;
+pub mod goals;
+pub mod jobs;
+pub mod notes;
 pub mod state;
 pub mod tasks;
 pub mod users;
-pub mod entries;
+pub mod export;
 
 use axum::{routing::get, Json, Router};
 use state::AppState;
 use std::net::SocketAddr;
+use tokio_cron_scheduler::{Job, JobScheduler};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+use crate::jobs::daily_check::job_runner;
 
 pub async fn run() -> Result<(), errors::AppError> {
     tracing_subscriber::registry()
@@ -43,6 +51,21 @@ pub async fn run() -> Result<(), errors::AppError> {
         settings: settings.clone(),
     };
 
+    let scheduler = JobScheduler::new().await?;
+    let job_state = app_state.clone();
+
+    scheduler
+        .add(Job::new_async("0 0 0 * * *", move |_, _| {
+            let state = job_state.clone();
+            Box::pin(async move {
+                job_runner(state).await; // And this is the function call
+            })
+        })?)
+        .await?;
+
+    scheduler.start().await?;
+    info!("Daily check cron job scheduled.");
+
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
@@ -51,8 +74,27 @@ pub async fn run() -> Result<(), errors::AppError> {
     let app = Router::new()
         .route("/", get(health_check_handler))
         .nest("/api/v1", users::router::create_router(app_state.clone()))
-        .nest("/api/v1/tasks", tasks::router::create_router(app_state.clone()))
-        .nest("/api/v1/entries", entries::router::create_router(app_state.clone()))
+        .nest(
+            "/api/v1/tasks",
+            tasks::router::create_router(app_state.clone()),
+        )
+        .nest(
+            "/api/v1/entries",
+            entries::router::create_router(app_state.clone()),
+        )
+        .nest(
+            "/api/v1/goals",
+            goals::router::create_router(app_state.clone()),
+        )
+        .nest(
+            "/api/v1/notes",
+            notes::router::create_router(app_state.clone()),
+        )
+        .nest(
+            "/api/v1/analytics",
+            analytics::router::create_router(app_state.clone()),
+        )
+        .nest("/api/v1/export", export::router::create_router(app_state.clone()))
         .layer(cors)
         .layer(tower_http::trace::TraceLayer::new_for_http());
 

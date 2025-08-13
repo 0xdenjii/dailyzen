@@ -59,46 +59,52 @@ pub async fn update_task_handler(
     payload.validate()?;
 
     // First, ensure the task exists and belongs to the user. This is correct.
-    let _task: Task = sqlx::query_as("SELECT * FROM tasks WHERE id = $1 AND user_id = $2")
+    sqlx::query("SELECT id FROM tasks WHERE id = $1 AND user_id = $2")
         .bind(task_id)
         .bind(user_id)
         .fetch_optional(&state.db_pool)
         .await?
         .ok_or_else(|| AppError::NotFound("Task not found".to_string()))?;
 
-    let mut has_fields = false; 
+    // Use the robust, manual QueryBuilder pattern for dynamic updates.
     let mut query_builder: QueryBuilder<sqlx::Postgres> =
         QueryBuilder::new("UPDATE tasks SET ");
-    let mut separated = query_builder.separated(", ");
+
+    let mut has_update = false;
+    let mut add_separator = |qb: &mut QueryBuilder<sqlx::Postgres>| {
+        if has_update {
+            qb.push(", ");
+        }
+        has_update = true;
+    };
 
     if let Some(name) = payload.name {
-        separated.push("name = ");
-        separated.push_bind(name);
-        has_fields = true; 
+        add_separator(&mut query_builder);
+        query_builder.push("name = ");
+        query_builder.push_bind(name);
     }
     if let Some(description) = payload.description {
-        separated.push("description = ");
-        separated.push_bind(description);
-        has_fields = true; 
+        add_separator(&mut query_builder);
+        query_builder.push("description = ");
+        query_builder.push_bind(description);
     }
     if let Some(points) = payload.points {
-        separated.push("points = ");
-        separated.push_bind(points);
-        has_fields = true; 
+        add_separator(&mut query_builder);
+        query_builder.push("points = ");
+        query_builder.push_bind(points);
     }
     if let Some(category) = payload.category {
-        separated.push("category = ");
-        separated.push_bind(category);
-        has_fields = true; 
+        add_separator(&mut query_builder);
+        query_builder.push("category = ");
+        query_builder.push_bind(category);
     }
     if let Some(is_mandatory) = payload.is_mandatory {
-        separated.push("is_mandatory = ");
-        separated.push_bind(is_mandatory);
-        has_fields = true; 
+        add_separator(&mut query_builder);
+        query_builder.push("is_mandatory = ");
+        query_builder.push_bind(is_mandatory);
     }
 
-
-    if !has_fields {
+    if !has_update {
         return Err(AppError::Validation(validator::ValidationErrors::new()));
     }
 
@@ -115,6 +121,7 @@ pub async fn update_task_handler(
 
     Ok(Json(result))
 }
+
 
 pub async fn delete_task_handler(
     State(state): State<AppState>,

@@ -4,7 +4,7 @@ use sqlx::postgres::PgDatabaseError;
 use validator::Validate;
 
 use crate::{
-    auth::create_jwt,
+    auth::{create_jwt, AuthUser},
     errors::AppError,
     state::AppState,
     users::models::{LoginUser, RegisterUser, User, UserPublic},
@@ -71,4 +71,18 @@ pub async fn login_handler(
     let token = create_jwt(user.id, &state.settings.jwt_secret)?;
 
     Ok(Json(json!({ "token": token })))
+}
+
+pub async fn get_current_user_handler(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<impl IntoResponse, AppError> {
+    let user: User = sqlx::query_as("SELECT * FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&state.db_pool)
+        .await?
+        .ok_or(AppError::UserNotFound)?; // Should be impossible if AuthUser works, but good practice
+
+    let user_public: UserPublic = user.into();
+    Ok(Json(user_public))
 }

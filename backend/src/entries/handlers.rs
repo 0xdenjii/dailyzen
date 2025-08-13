@@ -18,14 +18,13 @@ pub async fn create_entry_handler(
 ) -> Result<impl IntoResponse, AppError> {
     payload.validate()?;
 
-    // Start a database transaction
     let mut tx = state.db_pool.begin().await?;
 
-    // 1. Fetch the task to get its point value and verify ownership
+    // 1. Fetch task points and verify ownership
     let task = sqlx::query!("SELECT points FROM tasks WHERE id = $1 AND user_id = $2", payload.task_id, user_id)
-        .fetch_optional(&mut *tx) 
+        .fetch_optional(&mut *tx)
         .await?
-        .ok_or(AppError::NotFound("Task not found or you do not own it.".to_string()))?;
+        .ok_or_else(|| AppError::NotFound("Task not found or you do not own it.".to_string()))?;
 
     // 2. Insert the new entry
     let new_entry: Entry = sqlx::query_as(
@@ -38,21 +37,28 @@ pub async fn create_entry_handler(
     .bind(user_id)
     .bind(payload.task_id)
     .bind(payload.date)
-    .bind(task.points) 
+    .bind(task.points)
     .bind(payload.notes)
-    .fetch_one(&mut *tx) 
-    .await?;
+    .fetch_one(&mut *tx)
+    .await?; // We will handle the unique constraint violation in a later step if it's not already done.
 
-    // 3. Update the user's total points
+    // 3. Atomically update the user's total points and last entry date.
+    //    All streak logic is now REMOVED from this handler.
     sqlx::query!(
-        "UPDATE users SET total_points = total_points + $1 WHERE id = $2",
+        r#"
+        UPDATE users 
+        SET 
+            total_points = total_points + $1,
+            last_entry_date = $2
+        WHERE id = $3
+        "#,
         task.points as i64,
+        payload.date,
         user_id
     )
-    .execute(&mut *tx) 
+    .execute(&mut *tx)
     .await?;
 
-    // 4. Commit the transaction
     tx.commit().await?;
 
     Ok((StatusCode::CREATED, Json(new_entry)))

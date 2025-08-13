@@ -1,4 +1,4 @@
-use super::handlers::{login_handler, register_handler};
+use super::handlers::{login_handler, register_handler, get_current_user_handler};
 use crate::state::AppState;
 use axum::{
     Router,
@@ -13,5 +13,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/auth/register", post(register_handler))
         .route("/auth/login", post(login_handler))
         .route("/protected", get(protected_handler))
+                .route("/users/me", get(get_current_user_handler))
+
         .with_state(state)
 }
