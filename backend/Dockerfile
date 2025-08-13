@@ -1,13 +1,11 @@
 # --- Stage 1: The Builder ---
-FROM rust:1.79-slim-bullseye AS builder
-
-RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev
+FROM rust:1.80-slim-bullseye AS builder
 
 WORKDIR /app
 
-RUN rustup update stable && \
-    cargo install sqlx-cli --version 0.7.4
-
+# Install necessary build dependencies and sqlx-cli
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev && \
+    cargo install sqlx-cli
 
 # This build argument is passed from our `publish.yml` workflow.
 ARG DATABASE_URL
