@@ -1,7 +1,7 @@
 # --- Stage 1: The Builder ---
 FROM rust:1.80-bookworm AS builder
 
-# Install build tools and the postgresql server/client.
+# Install build tools and the postgresql server.
 RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev postgresql && \
     rm -rf /var/lib/apt/lists/*
 
@@ -28,11 +28,13 @@ COPY backend/ .
 RUN \
     # Start a temporary, local PostgreSQL server.
     service postgresql start && \
-    # Create a user and database using `su` because we are running as root.
-    su - postgres -c "psql -c \"CREATE USER user WITH PASSWORD 'password';\"" && \
-    su - postgres -c "psql -c \"CREATE DATABASE dailyzen OWNER user;\"" && \
-    # Set the DATABASE_URL and run migrations and prepare.
-    export DATABASE_URL="postgres://user:password@localhost:5432/dailyzen" && \
+    # Create a user and database using `psql -c` as the postgres user.
+    # We use a non-reserved keyword `appuser` to avoid SQL syntax errors.
+    su - postgres -c "psql -c \"CREATE USER appuser WITH PASSWORD 'password';\"" && \
+    su - postgres -c "psql -c \"CREATE DATABASE dailyzen OWNER appuser;\"" && \
+    # Set the DATABASE_URL with the new, safe username.
+    export DATABASE_URL="postgres://appuser:password@localhost:5432/dailyzen" && \
+    # Run migrations and prepare.
     sqlx migrate run && \
     cargo sqlx prepare && \
     # Stop the temporary server.
