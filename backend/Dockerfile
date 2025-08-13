@@ -1,11 +1,17 @@
 # --- Stage 1: The Builder ---
-# THIS IS THE KEY CHANGE: Use the `bookworm` variant, which has a newer, compatible toolchain.
-FROM rust:1.80-slim-bookworm AS builder
+# We start with a stable base image that includes `rustup`.
+FROM rust:1.80-bookworm AS builder
 
-# Install build tools and sqlx-cli in a single, efficient layer.
-# We pin the version for stable, repeatable builds.
-RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev && \
-    cargo install sqlx-cli --version 0.7.4 --locked
+# Install necessary OS-level dependencies.
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev
+
+# --- THIS IS THE DEFINITIVE FIX ---
+# Use rustup to install the nightly toolchain and set it as the default.
+# The nightly version of `cargo` understands the `edition2024` feature flag.
+RUN rustup install nightly && rustup default nightly
+
+# Now, install our tools using the working nightly cargo. We pin the version for stability.
+RUN cargo install sqlx-cli --version 0.7.4 --locked
 
 WORKDIR /app
 
@@ -23,13 +29,15 @@ RUN mkdir src && \
 # --- Application Build Layer ---
 COPY backend/ .
 
-# Now we use the globally installed `sqlx` command.
+# Use the globally installed `sqlx` command.
 RUN sqlx prepare
 
-# Build the final release binary.
+# Build the final release binary. This still uses the nightly compiler, but
+# the output binary is self-contained and does not require nightly to run.
 RUN cargo build --release
 
 # --- Stage 2: The Runner ---
+# The final image is based on stable Debian, NOT nightly. It's small and secure.
 FROM debian:bookworm-slim AS runner
 
 RUN apt-get update && apt-get install -y --no-install-recommends libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
