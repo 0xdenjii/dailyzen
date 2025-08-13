@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Install necessary build dependencies and sqlx-cli
 RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev && \
-    cargo install sqlx-cli
+    cargo install sqlx-cli --force
 
 # This build argument is passed from our `publish.yml` workflow.
 ARG DATABASE_URL
