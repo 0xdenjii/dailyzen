@@ -4,8 +4,9 @@ FROM rust:1.79-slim-bullseye AS builder
 WORKDIR /app
 
 # Install necessary build dependencies and sqlx-cli
-RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev && \
-    cargo install sqlx-cli
+RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev
+
+RUN cargo install sqlx-cli --version 0.7.4
 
 # This build argument is passed from our `publish.yml` workflow.
 ARG DATABASE_URL
