@@ -1,22 +1,23 @@
-name: Publish Docker Image
+name: Backend CD - Publish Docker Image
 
-# This workflow runs ONLY on pushes to the `main` branch.
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: # Allows manual triggering
+    # Only run this workflow if changes were made within the `backend` directory.
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
 
-# These permissions are required for pushing to the GitHub Container Registry.
 permissions:
   contents: read
   packages: write
 
 jobs:
   build-and-push:
-    name: Build and Push Image to GHCR
+    name: Build and Push Backend Image to GHCR
     runs-on: ubuntu-latest
 
-    # We need a PostgreSQL database for the `cargo sqlx prepare` step during the Docker build.
+    # The service container remains the same.
     services:
       postgres:
         image: postgres:16-alpine
@@ -49,12 +50,12 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
+          # CRITICAL FOR MONOREPO: The context is the root of the repository.
+          # This ensures that `COPY backend/` in the Dockerfile works correctly.
           context: .
-          file: ./Dockerfile
+          # CRITICAL FOR MONOREPO: We point to the Dockerfile inside the backend directory.
+          file: ./backend/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/dailyzen:latest
-          # This is the most critical part: We pass the DATABASE_URL for the service container
-          # into the Docker build process as a build argument. The Dockerfile's `ARG DATABASE_URL`
-          # receives this value, allowing `cargo sqlx prepare` to work.
           build-args: |
             DATABASE_URL=postgres://user:password@localhost:5432/dailyzen
