@@ -3,9 +3,7 @@ name: Backend CD - Publish Docker Image
 on:
   push:
     branches: [ "main" ]
-    # Only run this workflow if changes were made within the `backend` directory.
-    paths:
-      - 'backend/**'
+    paths: [ 'backend/**' ]
   workflow_dispatch:
 
 permissions:
@@ -17,7 +15,6 @@ jobs:
     name: Build and Push Backend Image to GHCR
     runs-on: ubuntu-latest
 
-    # The service container remains the same.
     services:
       postgres:
         image: postgres:16-alpine
@@ -25,8 +22,7 @@ jobs:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
           POSTGRES_DB: dailyzen
-        ports:
-          - 5432:5432
+        # We give the service a network alias `postgres`
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -50,13 +46,13 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          # CRITICAL FOR MONOREPO: The context is the root of the repository.
-          # This ensures that `COPY backend/` in the Dockerfile works correctly.
           context: .
-          # CRITICAL FOR MONOREPO: We point to the Dockerfile inside the backend directory.
           file: ./backend/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/dailyzen:latest
           build-args: |
-            DATABASE_URL=postgres://user:password@localhost:5432/dailyzen
-          no-cache: true
+            # --- THIS IS THE CRITICAL FIX ---
+            # Inside the Docker build, the service container is NOT on `localhost`.
+            # By default, Docker gives it a hostname equal to the service name: `postgres`.
+            # We must use that hostname to connect. The port is the internal Docker port.
+            DATABASE_URL=postgres://user:password@postgres:5432/dailyzen

@@ -1,70 +1,61 @@
-# name: Backend CI - Test Suite
+name: Backend CI - Test Suite
 
-# on:
-#   push:
-#     branches: [ "**" ]
-#     # Only run this workflow if changes were made within the `backend` directory.
-#     paths:
-#       - 'backend/**'
-#   pull_request:
-#     branches: [ "main" ]
-#     paths:
-#       - 'backend/**'
+on:
+  push:
+    branches: [ "**" ]
+    paths: [ 'backend/**' ]
+  pull_request:
+    branches: [ "main" ]
+    paths: [ 'backend/**' ]
 
-# jobs:
-#   test:
-#     name: Run Backend Test Suite
-#     runs-on: ubuntu-latest
+jobs:
+  test:
+    name: Run Backend Test Suite
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dailyzen
+        ports: [ "5432:5432" ]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
-#     # This service container remains the same.
-#     services:
-#       postgres:
-#         image: postgres:16-alpine
-#         env:
-#           POSTGRES_USER: user
-#           POSTGRES_PASSWORD: password
-#           POSTGRES_DB: dailyzen
-#         ports:
-#           - 5432:5432
-#         options: >-
-#           --health-cmd pg_isready
-#           --health-interval 10s
-#           --health-timeout 5s
-#           --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            backend/target/
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-backend-${{ hashFiles('backend/Cargo.lock') }}
 
-#       - name: Cache cargo dependencies
-#         uses: actions/cache@v4
-#         with:
-#           # The path is now relative to the repository root.
-#           path: |
-#             backend/target/
-#             ~/.cargo/bin/
-#             ~/.cargo/registry/index/
-#             ~/.cargo/registry/cache/
-#             ~/.cargo/git/db/
-#           # The key now specifically looks for the backend's Cargo.lock.
-#           key: ${{ runner.os }}-cargo-backend-${{ hashFiles('backend/Cargo.lock') }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-#       - name: Install Rust toolchain
-#         uses: dtolnay/rust-toolchain@stable
+      # The `cargo install` step is now completely REMOVED.
 
-#       - name: Install sqlx-cli
-#         # We specify the working directory for this and all subsequent steps.
-#         working-directory: ./backend
-#         run: cargo install sqlx-cli --force
+      - name: Run Migrations
+        working-directory: ./backend
+        # We can now use `cargo sqlx` directly.
+        run: cargo sqlx migrate run
+        env:
+          DATABASE_URL: "postgres://user:password@localhost:5432/dailyzen"
 
-#       - name: Run Migrations
-#         working-directory: ./backend
-#         run: sqlx migrate run
-#         env:
-#           DATABASE_URL: "postgres://user:password@localhost:5432/dailyzen"
-
-#       - name: Run Tests
-#         working-directory: ./backend
-#         run: cargo test --all-targets --all-features
-#         env:
-#           DATABASE_URL: "postgres://user:password@localhost:5432/dailyzen"
+      - name: Run Tests
+        working-directory: ./backend
+        run: cargo test --all-targets --all-features
+        env:
+          DATABASE_URL: "postgres://user:password@localhost:5432/dailyzen"
