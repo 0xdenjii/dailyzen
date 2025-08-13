@@ -55,7 +55,12 @@ jobs:
       - name: Install sqlx-cli
         # We specify the working directory for this and all subsequent steps.
         working-directory: ./backend
-        run: cargo install sqlx-cli
+        run: |
+          if ! command -v sqlx &> /dev/null
+          then
+            cargo install sqlx-cli --version 0.7.4
+          fi
+
 
       - name: Run Migrations
         working-directory: ./backend
