@@ -3,7 +3,6 @@
 
 # Ignore Cargo build artifacts and cache
 /target/
-Cargo.lock
 
 # Editor-specific files
 .idea/
