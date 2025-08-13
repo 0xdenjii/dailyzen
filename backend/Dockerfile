@@ -4,8 +4,9 @@ FROM rust:1.80-slim-bullseye AS builder
 WORKDIR /app
 
 # Install necessary build dependencies and sqlx-cli
+# MODIFIED: Pin sqlx-cli to a version compatible with Rust 1.80's stable toolchain.
 RUN apt-get update && apt-get install -y build-essential pkg-config libssl-dev && \
-    cargo install sqlx-cli --force
+    cargo install sqlx-cli --version 0.7.4 --force
 
 # This build argument is passed from our `publish.yml` workflow.
 ARG DATABASE_URL
@@ -23,7 +24,9 @@ COPY backend/ .
 
 # Generate the `.sqlx` directory. This step allows the final
 # build to succeed without a live database connection.
-RUN cargo sqlx prepare
+# Ensure the database is ready before running this.
+RUN until pg_isready -h localhost -p 5432; do echo "Waiting for database..."; sleep 2; done; \
+    cargo sqlx prepare
 
 # Build the final release binary.
 RUN cargo build --release
@@ -42,7 +45,6 @@ WORKDIR /home/appuser
 COPY --from=builder /app/target/release/backend .
 
 # Copy the configuration and migration files needed at runtime.
-# These files are now located at the root of the builder's context (`/app`).
 COPY --from=builder /app/config.toml .
 COPY --from=builder /app/migrations ./migrations
 
