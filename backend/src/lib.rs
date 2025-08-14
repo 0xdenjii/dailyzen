@@ -3,17 +3,17 @@ pub mod auth;
 pub mod config;
 pub mod entries;
 pub mod errors;
+pub mod export;
 pub mod goals;
 pub mod jobs;
 pub mod notes;
 pub mod state;
 pub mod tasks;
 pub mod users;
-pub mod export;
 
 use axum::{routing::get, Json, Router};
 use state::AppState;
-use std::net::SocketAddr;
+use std::{env, net::SocketAddr};
 use tokio_cron_scheduler::{Job, JobScheduler};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
@@ -35,7 +35,11 @@ pub async fn run() -> Result<(), errors::AppError> {
     let settings = config::get_config().expect("Failed to read configuration.");
 
     info!("Connecting to the database...");
-    let db_pool = sqlx::PgPool::connect(&settings.database_connection_string())
+    let database_url =
+        env::var("DATABASE_URL").unwrap_or_else(|_| settings.database_connection_string());
+
+    println!("Using database URL: {}", database_url);
+    let db_pool = sqlx::PgPool::connect(&database_url)
         .await
         .expect("Failed to connect to Postgres.");
 
@@ -94,7 +98,10 @@ pub async fn run() -> Result<(), errors::AppError> {
             "/api/v1/analytics",
             analytics::router::create_router(app_state.clone()),
         )
-        .nest("/api/v1/export", export::router::create_router(app_state.clone()))
+        .nest(
+            "/api/v1/export",
+            export::router::create_router(app_state.clone()),
+        )
         .layer(cors)
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
