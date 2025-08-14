@@ -60,7 +60,7 @@ async fn create_task(app: &TestApp, token: &str, name: &str, points: i32) -> Tas
     let response = client
         .post(format!("{}/api/v1/tasks", &app.address))
         .bearer_auth(token)
-        .json(&json!({"name": name, "points": points, "category": "Mental", "is_mandatory": false}))
+        .json(&json!({"name": name, "points": points, "category": "Mental", "isMandatory": false}))
         .send()
         .await
         .unwrap();

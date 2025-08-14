@@ -84,6 +84,9 @@ pub struct AnalyticsResponse {
     pub weekly_average: f64,
     pub total_points: i64,
     pub today_points: i64,
+
+    pub previous_period_points: i64,
+    pub prev_weekly_average: f64, 
 }
 
 // Query parameter for the time range

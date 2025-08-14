@@ -1,20 +1,17 @@
-import { useState, useEffect } from 'react';
-import { BookOpen, Calendar, Save, Edit3, Search, Filter } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { BookOpen, Calendar as CalendarIcon, Save } from 'lucide-react'; // FIX: Renamed icon import
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format } from 'date-fns';
-import { notesApi } from '@/lib/mockApi';
-import type { DailyNote, NoteFormData } from '@/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { Note } from '@/types';
+import { useGetNoteForDate, useGetRecentNotes, useNotesCalendar, useUpsertNote } from '@/hooks/useNotes';
+import { format, startOfMonth } from 'date-fns';
+import { Calendar } from '@/components/ui/calendar'; // FIX: This is the main calendar component
 
 const MOOD_EMOJIS = {
   1: { emoji: '😢', label: 'Very Sad', color: 'text-red-500' },
@@ -24,12 +21,14 @@ const MOOD_EMOJIS = {
   5: { emoji: '😄', label: 'Very Happy', color: 'text-emerald-500' }
 } as const;
 
+type MoodValue = keyof typeof MOOD_EMOJIS;
+
 const MoodSelector = ({ 
   mood, 
   onMoodChange 
 }: { 
-  mood?: 1 | 2 | 3 | 4 | 5; 
-  onMoodChange: (mood: 1 | 2 | 3 | 4 | 5) => void;
+  mood?: MoodValue; 
+  onMoodChange: (mood: MoodValue) => void;
 }) => {
   return (
     <div className="space-y-2">
@@ -38,13 +37,13 @@ const MoodSelector = ({
         {Object.entries(MOOD_EMOJIS).map(([value, data]) => (
           <Button
             key={value}
-            variant={mood === Number(value) ? "default" : "outline"}
+            variant={mood === Number(value) as MoodValue ? "default" : "outline"}
             size="sm"
             className={cn(
               "h-12 w-12 text-lg transition-all",
-              mood === Number(value) && "shadow-glow"
+              mood === Number(value) as MoodValue && "shadow-glow"
             )}
-            onClick={() => onMoodChange(Number(value) as 1 | 2 | 3 | 4 | 5)}
+            onClick={() => onMoodChange(Number(value) as MoodValue)}
           >
             {data.emoji}
           </Button>
@@ -64,30 +63,25 @@ const NoteCard = ({
   isSelected, 
   onClick 
 }: { 
-  note: DailyNote; 
+  note: Note; 
   isSelected: boolean;
   onClick: () => void;
 }) => {
-  const mood = note.mood ? MOOD_EMOJIS[note.mood] : null;
+  // FIX: Safely access mood by casting the type
+  const mood = note.mood ? MOOD_EMOJIS[note.mood as MoodValue] : null;
   
   return (
     <Card 
-      className={cn(
-        "cursor-pointer transition-all card-hover",
-        isSelected && "ring-2 ring-primary shadow-glow"
-      )}
+      className={cn("cursor-pointer transition-all card-hover", isSelected && "ring-2 ring-primary shadow-glow")}
       onClick={onClick}
     >
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium">
-            {format(new Date(note.date), 'MMM dd, yyyy')}
+            {/* FIX: Add T00:00:00 to avoid timezone issues in format() */}
+            {format(new Date(note.date + 'T00:00:00'), 'MMM dd, yyyy')}
           </CardTitle>
-          {mood && (
-            <div className="flex items-center gap-1">
-              <span className="text-lg">{mood.emoji}</span>
-            </div>
-          )}
+          {mood && <span className="text-lg">{mood.emoji}</span>}
         </div>
       </CardHeader>
       <CardContent>
@@ -101,230 +95,110 @@ const NoteCard = ({
 
 export default function Notes() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [currentNote, setCurrentNote] = useState<DailyNote | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [recentNotes, setRecentNotes] = useState<DailyNote[]>([]);
-  const [formData, setFormData] = useState<NoteFormData>({
-    content: '',
-    mood: undefined,
-    date: new Date().toISOString().split('T')[0]
-  });
+  const [calendarMonth, setCalendarMonth] = useState<Date>(startOfMonth(new Date()));
+  const [content, setContent] = useState('');
+  const [mood, setMood] = useState<MoodValue | undefined>();
 
-  const dateString = selectedDate.toISOString().split('T')[0];
+  const dateString = useMemo(() => format(selectedDate, 'yyyy-MM-dd'), [selectedDate]);
 
-  useEffect(() => {
-    loadNoteForDate(dateString);
-    setFormData(prev => ({ ...prev, date: dateString }));
-  }, [dateString]);
+  const { data: currentNote, isLoading: isLoadingNote } = useGetNoteForDate(dateString);
+  const { data: recentNotes = [] } = useGetRecentNotes();
+  const { mutate: upsertNote, isPending: isSaving } = useUpsertNote();
+  const { data: notedDates = [] } = useNotesCalendar(
+    calendarMonth.getMonth() + 1,
+    calendarMonth.getFullYear()
+  );
 
   useEffect(() => {
-    loadRecentNotes();
-  }, []);
-
-  const loadNoteForDate = async (date: string) => {
-    setIsLoading(true);
-    try {
-      const response = await notesApi.getByDate(date);
-      if (response.success) {
-        const note = response.data;
-        setCurrentNote(note);
-        setFormData({
-          content: note?.content || '',
-          mood: note?.mood,
-          date
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load note for selected date.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+    if (currentNote) {
+      setContent(currentNote.content || '');
+      setMood(currentNote.mood as MoodValue | undefined);
+    } else {
+      setContent('');
+      setMood(undefined);
     }
-  };
+  }, [currentNote]);
 
-  const loadRecentNotes = async () => {
-    // For demo, generate some recent notes
-    const notes: DailyNote[] = [];
-    for (let i = 1; i <= 7; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateString = date.toISOString().split('T')[0];
-      
-      if (Math.random() > 0.3) { // 70% chance of having a note
-        notes.push({
-          id: `note-${dateString}`,
-          date: dateString,
-          content: `This is a sample note for ${format(date, 'MMM dd')}. Today was a productive day with lots of learning and growth.`,
-          mood: Math.floor(Math.random() * 5) + 1 as 1 | 2 | 3 | 4 | 5,
-          createdAt: `${dateString}T20:00:00Z`,
-          updatedAt: `${dateString}T20:00:00Z`
-        });
-      }
-    }
-    setRecentNotes(notes);
-  };
-
-  const handleSave = async () => {
-    if (!formData.content.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter some content before saving.",
-        variant: "destructive",
-      });
+  const handleSave = () => {
+    if (!content.trim()) {
+      toast({ title: "Content is empty", description: "Please write something before saving.", variant: "destructive" });
       return;
     }
-
-    setIsSaving(true);
-    try {
-      const response = await notesApi.createOrUpdate(formData);
-      if (response.success && response.data) {
-        setCurrentNote(response.data);
-        
-        // Update recent notes if this is a new note
-        if (!currentNote) {
-          setRecentNotes(prev => [response.data!, ...prev].slice(0, 7));
-        }
-        
-        toast({
-          title: "Note Saved",
-          description: "Your daily note has been saved successfully!",
-        });
+    upsertNote(
+      { date: dateString, content, mood },
+      {
+        onSuccess: () => toast({ title: "Note Saved", description: "Your daily reflection is saved." }),
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save note. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
+    );
   };
 
-  const hasChanges = currentNote ? (
-    currentNote.content !== formData.content || 
-    currentNote.mood !== formData.mood
-  ) : formData.content.trim().length > 0;
+  const hasChanges = useMemo(() => {
+    if (isLoadingNote) return false;
+    const originalContent = currentNote?.content || '';
+    const originalMood = currentNote?.mood as MoodValue | undefined;
+    return content !== originalContent || mood !== originalMood;
+  }, [content, mood, currentNote, isLoadingNote]);
+
+  const notedDaysModifier = { noted: notedDates.map(dateStr => new Date(dateStr + 'T00:00:00')) };
+  const notedDaysModifierStyles = { noted: { fontWeight: 'bold', border: '2px solid hsl(var(--primary))' } };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gradient-primary flex items-center gap-2">
             <BookOpen className="h-8 w-8" />
             Daily Notes
           </h1>
-          <p className="text-muted-foreground">
-            Reflect on your day and track your thoughts
-          </p>
+          <p className="text-muted-foreground">Reflect on your day and track your thoughts</p>
         </div>
       </div>
-
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main Editor - Left Column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Date Selector */}
           <Card className="card-hover">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Select Date
+                <CalendarIcon className="h-5 w-5" />
+                Journal Calendar
               </CardTitle>
+              <CardDescription>Select a day to view or write a note. Bolded dates have an entry.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal h-12",
-                      !selectedDate && "text-muted-foreground"
-                    )}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {selectedDate ? format(selectedDate, "PPPP") : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    disabled={(date) => date > new Date()}
-                    initialFocus
-                    className="pointer-events-auto"
-                  />
-                </PopoverContent>
-              </Popover>
+              <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(day) => day && setSelectedDate(day)}
+                  month={calendarMonth}
+                  onMonthChange={setCalendarMonth}
+                  modifiers={notedDaysModifier}
+                  modifiersStyles={notedDaysModifierStyles}
+                  disabled={(date) => date > new Date()}
+                  className="p-0 rounded-md border"
+              />
             </CardContent>
           </Card>
-
-          {/* Note Editor */}
           <Card className="card-hover">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>
-                  {currentNote ? 'Edit Note' : 'Write Note'}
-                </CardTitle>
-                <Badge variant={currentNote ? 'secondary' : 'outline'}>
-                  {currentNote ? 'Saved' : 'New'}
-                </Badge>
+                <CardTitle>{currentNote ? 'Edit Note' : 'Write Note'}</CardTitle>
+                <Badge variant={currentNote ? 'secondary' : 'outline'}>{currentNote ? 'Saved' : 'New'}</Badge>
               </div>
-              <CardDescription>
-                {format(selectedDate, 'PPPP')}
-              </CardDescription>
+              <CardDescription>{format(selectedDate, 'PPPP')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {isLoading ? (
-                <div className="space-y-4">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-32 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </div>
-              ) : (
+              {isLoadingNote ? <Skeleton className="h-64 w-full" /> : (
                 <>
-                  {/* Mood Selector */}
-                  <MoodSelector
-                    mood={formData.mood}
-                    onMoodChange={(mood) => setFormData({ ...formData, mood })}
-                  />
-
-                  {/* Note Content */}
+                  <MoodSelector mood={mood} onMoodChange={setMood} />
                   <div className="space-y-2">
                     <Label htmlFor="content">What's on your mind?</Label>
-                    <Textarea
-                      id="content"
-                      placeholder="Write about your day, thoughts, achievements, challenges, or anything else you'd like to remember..."
-                      value={formData.content}
-                      onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                      rows={12}
-                      className="resize-none"
-                    />
+                    <Textarea id="content" value={content} onChange={(e) => setContent(e.target.value)} rows={12} />
                   </div>
-
-                  {/* Save Button */}
                   <div className="flex justify-end">
-                    <Button
-                      onClick={handleSave}
-                      disabled={!hasChanges || isSaving}
-                      className="btn-glow"
-                    >
-                      {isSaving ? (
-                        <>
-                          <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="mr-2 h-4 w-4" />
-                          Save Note
-                        </>
-                      )}
+                    <Button onClick={handleSave} disabled={!hasChanges || isSaving} className="btn-glow">
+                      {isSaving && <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+                      <Save className="mr-2 h-4 w-4" />
+                      Save Note
                     </Button>
                   </div>
                 </>
@@ -332,14 +206,9 @@ export default function Notes() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Sidebar - Recent Notes */}
         <div className="space-y-6">
-          {/* Quick Stats */}
           <Card className="card-hover">
-            <CardHeader>
-              <CardTitle className="text-lg">This Week</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg">This Week</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -350,26 +219,15 @@ export default function Notes() {
                   <span className="text-sm text-muted-foreground">Avg Mood</span>
                   <div className="flex items-center gap-1">
                     {recentNotes.length > 0 ? (
-                      <>
-                        <span className="text-lg">
-                          {MOOD_EMOJIS[Math.round(
-                            recentNotes
-                              .filter(n => n.mood)
-                              .reduce((sum, n) => sum + (n.mood || 0), 0) / 
-                            recentNotes.filter(n => n.mood).length
-                          ) as 1 | 2 | 3 | 4 | 5]?.emoji || '😐'}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
+                      <span className="text-lg">
+                        {MOOD_EMOJIS[Math.round(recentNotes.filter(n => n.mood).reduce((sum, n) => sum + (n.mood || 0), 0) / recentNotes.filter(n => n.mood).length) as MoodValue]?.emoji || '😐'}
+                      </span>
+                    ) : <span className="text-sm text-muted-foreground">-</span>}
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
-
-          {/* Recent Notes */}
           <Card className="card-hover">
             <CardHeader>
               <CardTitle className="text-lg">Recent Notes</CardTitle>
@@ -383,24 +241,18 @@ export default function Notes() {
                       key={note.id}
                       note={note}
                       isSelected={note.date === dateString}
-                      onClick={() => {
-                        setSelectedDate(new Date(note.date));
-                      }}
+                      onClick={() => setSelectedDate(new Date(note.date + 'T00:00:00'))} // FIX: Add time to avoid timezone issues
                     />
                   ))
                 ) : (
                   <div className="text-center py-8">
                     <BookOpen className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-                    <p className="text-sm text-muted-foreground">
-                      No recent notes yet. Start writing to see them here!
-                    </p>
+                    <p className="text-sm text-muted-foreground">No recent notes yet.</p>
                   </div>
                 )}
               </div>
             </CardContent>
           </Card>
-
-          {/* Mood Tracker */}
           <Card className="card-hover">
             <CardHeader>
               <CardTitle className="text-lg">Mood Tracker</CardTitle>
@@ -411,7 +263,6 @@ export default function Notes() {
                 {Object.entries(MOOD_EMOJIS).reverse().map(([value, data]) => {
                   const count = recentNotes.filter(n => n.mood === Number(value)).length;
                   const percentage = recentNotes.length > 0 ? (count / recentNotes.length) * 100 : 0;
-                  
                   return (
                     <div key={value} className="flex items-center gap-3">
                       <span className="text-lg">{data.emoji}</span>

@@ -1,224 +1,171 @@
-// TypeScript interfaces for the Self-Development App
+// =================================================================
+//                 TYPE DEFINITIONS FOR DAILYZEN API
+//   These types are the "source of truth" and directly map to the
+//   Rust backend's data structures. We will adapt the UI to these.
+// =================================================================
 
+// --- Core Data Models ---
 
+export type TaskCategory = "Physical" | "Mental";
 
 export interface Task {
   id: string;
+  userId: string;
   name: string;
-  points: number;
-  isMandatory: boolean;
-  category: 'Physical' | 'Mental';
   description?: string;
-  createdAt: string;
+  points: number;
+  category: TaskCategory;
+  isMandatory: boolean;
+  createdAt: string; // ISO 8601 format
+  updatedAt: string; // ISO 8601 format
 }
 
 export interface Entry {
   id: string;
+  userId: string;
   taskId: string;
+  date: string; // "YYYY-MM-DD"
+  pointsAwarded: number;
   notes?: string;
-  date: string; // Format: YYYY-MM-DD
-  completedAt: string;
-  points: number;
+  completedAt: string; // ISO 8601 format
 }
+
+export type GoalCategory = "Physical" | "Mental" | "Career" | "Personal" | "Financial";
 
 export interface Goal {
   id: string;
+  userId: string;
   description: string;
-  deadline: string; // Format: YYYY-MM-DD
+  category: GoalCategory;
+  deadline: string; // "YYYY-MM-DD"
   penalty: number;
-  progress: number; // Percentage from 0 to 100
-  category: 'Physical' | 'Mental' | 'Career' | 'Personal' | 'Financial';
-  createdAt: string;
+  progress: number; // 0-100
   isCompleted: boolean;
+  createdAt: string; // ISO 8601 format
+  updatedAt: string; // ISO 8601 format
 }
 
-export interface Badge {
+export interface Note {
+  id: string;
+  userId: string;
+  date: string; // "YYYY-MM-DD"
+  content?: string;
+  mood?: number; // 1-5
+  createdAt: string; // ISO 8601 format
+  updatedAt: string; // ISO 8601 format
+}
+
+// --- User & Authentication ---
+
+export interface UserPublic {
+  id: string;
+  username: string;
+  email: string;
+  totalPoints: number;
+  currentStreak: number;
+  longestStreak: number;
+  createdAt: string; // ISO 8601 format
+}
+
+// --- Analytics & Badges ---
+
+// The raw data for a badge as it comes from the backend
+export type BadgeMaterialTier = "Coal" | "Iron" | "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond";
+export type BadgeRankTier = "Mortal" | "Aspirant" | "Demigod" | "God" | "Titan";
+export type BadgeFocusFactor = "Consistency" | "Volume" | "Mental" | "Physical" | "Dedication" | "Ambition";
+
+export interface EarnedBadge {
+  id: string;
+  userId: string;
+  materialTier: BadgeMaterialTier;
+  rankTier: BadgeRankTier;
+  focusFactor: BadgeFocusFactor;
+  threshold: number;
+  unlockedAt: string; // ISO 8601 format
+}
+
+// This is a UI-specific type. We will map EarnedBadge to this for display.
+export interface UIBadge {
   id: string;
   name: string;
   description: string;
   icon: string;
-  rarity: 'Bronze' | 'Silver' | 'Gold' | 'Legendary';
+  rarity: "Bronze" | "Silver" | "Gold" | "Legendary";
   unlockedAt?: string;
-  requirement: string;
 }
 
-export interface Streak {
+
+export interface Streaks {
   current: number;
   longest: number;
-  lastActivity: string;
 }
 
 export interface UserLevel {
   level: number;
-  currentXP: number;
+  currentXp: number;
   xpToNextLevel: number;
-  totalXP: number;
+  totalXp: number;
 }
 
 export interface ChartDataPoint {
   label: string;
   value: number;
-  date?: string;
 }
 
 export interface HeatmapDay {
-  date: string;
-  activity: number; // 0-4 scale for intensity
-  points: number;
+  date: string; // "YYYY-MM-DD"
+  activity: number; // 0-4
+}
+
+export interface CategoryBreakdown {
+  physical: number;
+  mental: number;
 }
 
 export interface AnalyticsResponse {
-  streaks: Streak;
+  streaks: Streaks;
   pointsChartData: ChartDataPoint[];
   heatmapData: HeatmapDay[];
-  categoryBreakdown: {
-    physical: number;
-    mental: number;
-  };
+  categoryBreakdown: CategoryBreakdown;
   userLevel: UserLevel;
-  badges: Badge[];
+  badges: EarnedBadge[]; 
   weeklyAverage: number;
-  monthlyAverage: number;
   totalPoints: number;
   todayPoints: number;
+
+  previousPeriodPoints: number;
+  prevWeeklyAverage: number;
 }
 
-export interface DailyNote {
-  id: string;
-  date: string; // Format: YYYY-MM-DD
-  content: string;
-  mood?: 1 | 2 | 3 | 4 | 5; // 1 = very sad, 5 = very happy
-  createdAt: string;
-  updatedAt: string;
-}
+// --- API Payloads (Form Data) ---
 
-export interface ExportData {
-  tasks: Task[];
-  entries: Entry[];
-  goals: Goal[];
-  notes: DailyNote[];
-  analytics: AnalyticsResponse;
-  exportDate: string;
-}
-
-export interface ExportOptions {
-  startDate: string;
-  endDate: string;
-  format: 'CSV' | 'JSON';
-  includeNotes: boolean;
-  includeTasks: boolean;
-  includeGoals: boolean;
-  includeAnalytics: boolean;
-}
-
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  fullName: string;
-  avatar?: string;
-  joinedAt: string;
-  preferences: {
-    theme: 'light' | 'dark' | 'system';
-    notifications: boolean;
-    weekStartsOnMonday: boolean;
-    timeFormat: '12h' | '24h';
-  };
-}
-
-export interface NotificationMessage {
-  id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  title: string;
-  message: string;
-  duration?: number; // ms
-  action?: {
-    label: string;
-    callback: () => void;
-  };
-}
-
-// API Response types
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
-  hasMore: boolean;
-}
-
-// Form types
 export interface TaskFormData {
   name: string;
-  points: number;
-  isMandatory: boolean;
-  category: 'Physical' | 'Mental';
   description?: string;
+  points: number;
+  category: TaskCategory;
+  isMandatory: boolean;
 }
 
 export interface GoalFormData {
-  description: string;
-  deadline: string;
-  penalty: number;
-  category: 'Physical' | 'Mental' | 'Career' | 'Personal' | 'Financial';
+    description: string;
+    category: GoalCategory;
+    deadline: string; // "YYYY-MM-DD"
+    penalty: number;
+}
+
+export interface UpdateGoalFormData extends Partial<GoalFormData> {
+  progress?: number;
 }
 
 export interface EntryFormData {
   taskId: string;
   notes?: string;
-  date: string;
+  date: string; // "YYYY-MM-DD"
 }
 
 export interface NoteFormData {
   content: string;
-  mood?: 1 | 2 | 3 | 4 | 5;
-  date: string;
-}
-
-// UI State types
-export interface LoadingState {
-  isLoading: boolean;
-  error?: string;
-}
-
-export interface ModalState {
-  isOpen: boolean;
-  type?: 'task' | 'goal' | 'entry' | 'note' | 'export' | 'badge' | 'levelUp';
-  data?: any;
-}
-
-export interface ToastState {
-  messages: NotificationMessage[];
-}
-
-// Filter and sort options
-export interface TaskFilters {
-  category?: 'Physical' | 'Mental' | 'All';
-  mandatory?: boolean;
-  sortBy: 'name' | 'points' | 'category' | 'created';
-  sortOrder: 'asc' | 'desc';
-}
-
-export interface EntryFilters {
-  dateRange: {
-    start: string;
-    end: string;
-  };
-  category?: 'Physical' | 'Mental' | 'All';
-  sortBy: 'date' | 'points' | 'task';
-  sortOrder: 'asc' | 'desc';
-}
-
-export interface GoalFilters {
-  status: 'all' | 'active' | 'completed' | 'overdue';
-  category?: 'Physical' | 'Mental' | 'Career' | 'Personal' | 'Financial' | 'All';
-  sortBy: 'deadline' | 'progress' | 'created' | 'category';
-  sortOrder: 'asc' | 'desc';
+  mood?: number;
+  date: string; // "YYYY-MM-DD"
 }

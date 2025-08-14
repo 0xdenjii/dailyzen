@@ -33,6 +33,7 @@ pub struct Goal {
 
 // Payload for creating a new goal, matching GoalFormData
 #[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateGoal {
     #[validate(length(min = 5, message = "Description must be at least 5 characters long"))]
     pub description: String,
@@ -44,6 +45,7 @@ pub struct CreateGoal {
 
 // Payload for updating an existing goal. All fields are optional.
 #[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateGoal {
     #[validate(length(min = 5, message = "Description must be at least 5 characters long"))]
     pub description: Option<String>,

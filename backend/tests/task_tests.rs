@@ -66,7 +66,7 @@ async fn create_task_succeeds_with_valid_data() {
         "description": "Read for 30 minutes",
         "points": 10,
         "category": "Mental",
-        "is_mandatory": false
+        "isMandatory": false
     });
 
     // Act
@@ -109,7 +109,7 @@ async fn get_tasks_returns_only_user_owned_tasks() {
     client
         .post(format!("{}/api/v1/tasks", &app.address))
         .bearer_auth(&user1.token)
-        .json(&json!({"name": "User 1 Task", "points": 10, "category": "Physical", "is_mandatory": true}))
+        .json(&json!({"name": "User 1 Task", "points": 10, "category": "Physical", "isMandatory": true}))
         .send()
         .await
         .unwrap();
@@ -118,7 +118,7 @@ async fn get_tasks_returns_only_user_owned_tasks() {
     client
         .post(format!("{}/api/v1/tasks", &app.address))
         .bearer_auth(&user2.token)
-        .json(&json!({"name": "User 2 Task", "points": 5, "category": "Mental", "is_mandatory": false}))
+        .json(&json!({"name": "User 2 Task", "points": 5, "category": "Mental", "isMandatory": false}))
         .send()
         .await
         .unwrap();
@@ -171,7 +171,7 @@ async fn delete_task_succeeds_for_owned_task() {
     let create_response = client
         .post(format!("{}/api/v1/tasks", &app.address))
         .bearer_auth(&user.token)
-        .json(&json!({"name": "To be deleted", "points": 1, "category": "Mental", "is_mandatory": false}))
+        .json(&json!({"name": "To be deleted", "points": 1, "category": "Mental", "isMandatory": false}))
         .send()
         .await
         .unwrap();

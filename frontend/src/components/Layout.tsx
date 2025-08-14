@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { 
-  Home, Target, Plus, BookOpen, TrendingUp, Download, 
+import {
+  Home, Target, Plus, BookOpen, TrendingUp, Download,
   Menu, X, User, Settings, Moon, Sun, Bell
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { apiClient } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
 
 const navigationItems = [
   {
@@ -53,14 +56,56 @@ export default function Layout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
-  
+
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
     document.documentElement.classList.toggle('dark');
   };
+
+  const handleExportData = async () => {
+    try {
+      const response = await fetch('/api/export', { // Use fetch directly to handle blob
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = 'dailyzen_export.json';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+?)"/);
+        if (filenameMatch && filenameMatch.length === 2) {
+          filename = filenameMatch[1];
+        }
+      }
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to export data:", error);
+      // You can add a toast notification here
+      toast({
+        title: 'Export Failed',
+        description: 'There was an error exporting your data. Please try again later.',
+        variant: 'destructive',
+      });      
+    }
+  };
+
 
   const isActiveRoute = (href: string) => {
     if (href === '/') {
@@ -73,7 +118,7 @@ export default function Layout() {
     <div className="min-h-screen bg-background font-inter">
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={closeMobileMenu}
         />
@@ -95,7 +140,7 @@ export default function Layout() {
                 <Menu className="h-5 w-5" />
               )}
             </button>
-            
+
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
                 <span className="text-white font-bold text-sm">G</span>
@@ -111,7 +156,7 @@ export default function Layout() {
             {navigationItems.map((item) => {
               const Icon = item.icon;
               const isActive = isActiveRoute(item.href);
-              
+
               return (
                 <NavLink
                   key={item.name}
@@ -119,8 +164,8 @@ export default function Layout() {
                   className={cn(
                     "flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200",
                     "hover:bg-muted/50 hover:scale-105",
-                    isActive 
-                      ? "bg-primary text-primary-foreground shadow-md" 
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-md"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -148,8 +193,8 @@ export default function Layout() {
 
             <Button variant="ghost" size="sm" className="relative">
               <Bell className="h-4 w-4" />
-              <Badge 
-                variant="destructive" 
+              <Badge
+                variant="destructive"
                 className="absolute -top-1 -right-1 h-4 w-4 p-0 text-[10px] flex items-center justify-center"
               >
                 2
@@ -161,21 +206,28 @@ export default function Layout() {
                 <Button variant="ghost" size="sm" className="gap-2">
                   <Avatar className="h-6 w-6">
                     <AvatarImage src="/placeholder-avatar.jpg" />
-                    <AvatarFallback className="text-xs">JD</AvatarFallback>
+                    {/* Use initials from username */}
+                    <AvatarFallback className="text-xs">
+                      {user?.username.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
-                  <span className="hidden sm:block font-medium">John Doe</span>
+                  {/* Display the real username */}
+                  <span className="hidden sm:block font-medium">{user?.username}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <div className="flex items-center justify-start gap-2 p-2">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src="/placeholder-avatar.jpg" />
-                    <AvatarFallback>JD</AvatarFallback>
+                    <AvatarFallback>
+                      {user?.username.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col space-y-1 leading-none">
-                    <p className="font-medium">John Doe</p>
+                    {/* Display real user data */}
+                    <p className="font-medium">{user?.username}</p>
                     <p className="w-[200px] truncate text-sm text-muted-foreground">
-                      john@example.com
+                      {user?.email}
                     </p>
                   </div>
                 </div>
@@ -188,16 +240,19 @@ export default function Layout() {
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                {/* Wire up the export handler */}
+                <DropdownMenuItem onClick={handleExportData}>
                   <Download className="mr-2 h-4 w-4" />
                   <span>Export Data</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">
+                {/* Wire up the logout function */}
+                <DropdownMenuItem className="text-destructive" onClick={logout}>
                   Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
           </div>
         </div>
       </header>
@@ -228,7 +283,7 @@ export default function Layout() {
             {navigationItems.map((item) => {
               const Icon = item.icon;
               const isActive = isActiveRoute(item.href);
-              
+
               return (
                 <NavLink
                   key={item.name}
@@ -237,8 +292,8 @@ export default function Layout() {
                   className={cn(
                     "flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200",
                     "hover:bg-muted/50",
-                    isActive 
-                      ? "bg-primary text-primary-foreground shadow-md" 
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-md"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >

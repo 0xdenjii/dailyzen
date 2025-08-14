@@ -203,7 +203,7 @@ impl TestApp {
         let response = client
             .post(format!("{}/api/v1/tasks", &self.address))
             .bearer_auth(token)
-            .json(&json!({"name": name, "points": points, "category": "Mental", "is_mandatory": is_mandatory}))
+            .json(&json!({"name": name, "points": points, "category": "Mental", "isMandatory": is_mandatory}))
             .send()
             .await
             .expect("Setup: Failed to create task.");

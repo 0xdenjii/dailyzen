@@ -9,6 +9,8 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use chrono::NaiveDate;
+use serde::Deserialize;
 use validator::Validate;
 
 /// Handles creating a new note or updating an existing one for a given day.
@@ -74,4 +76,38 @@ pub async fn get_recent_notes_handler(
     .await?;
 
     Ok(Json(recent_notes))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CalendarQuery {
+    pub month: u32,
+    pub year: i32,
+}
+
+pub async fn get_notes_for_calendar_handler(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Query(query): Query<CalendarQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    if !(1..=12).contains(&query.month) {
+        return Err(AppError::Validation(validator::ValidationErrors::new()));
+    }
+    
+    let dates: Vec<NaiveDate> = sqlx::query_scalar(
+        r#"
+        SELECT DISTINCT date 
+        FROM notes
+        WHERE user_id = $1
+          AND EXTRACT(MONTH FROM date) = $2
+          AND EXTRACT(YEAR FROM date) = $3
+        ORDER BY date
+        "#,
+    )
+    .bind(user_id)
+    .bind(query.month as i32) // Postgres EXTRACT works with i32/i64
+    .bind(query.year)
+    .fetch_all(&state.db_pool)
+    .await?;
+
+    Ok(Json(dates))
 }

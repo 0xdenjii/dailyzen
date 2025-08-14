@@ -19,6 +19,7 @@ pub struct Note {
 }
 
 #[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct UpsertNote {
     #[validate(length(min = 1, message = "Content cannot be empty if provided"))]
     pub content: String,

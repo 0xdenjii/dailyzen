@@ -18,7 +18,7 @@ async fn export_data_returns_all_user_information() {
 
     // 1. Create a Task
     let task_res = client.post(format!("{}/api/v1/tasks", &app.address)).bearer_auth(&user.token)
-        .json(&json!({"name": "Export Task", "points": 10, "category": "Mental", "is_mandatory": false}))
+        .json(&json!({"name": "Export Task", "points": 10, "category": "Mental", "isMandatory": false}))
         .send().await.unwrap();
     let task: serde_json::Value = task_res.json().await.unwrap();
 

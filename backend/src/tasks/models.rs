@@ -25,6 +25,7 @@ pub struct Task {
 }
 
 #[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateTask {
     #[validate(length(min = 3, message = "Task name must be at least 3 characters long"))]
     pub name: String,
@@ -36,6 +37,7 @@ pub struct CreateTask {
 }
 
 #[derive(Debug, Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateTask {
     #[validate(length(min = 3, message = "Task name must be at least 3 characters long"))]
     pub name: Option<String>,

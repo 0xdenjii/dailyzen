@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Target, Plus, Calendar, Trophy, AlertCircle, 
-  Edit3, Trash2, CheckCircle2, Clock, Filter
-} from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+  Edit3, Trash2, CheckCircle2, Clock} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -14,13 +13,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
 import { goalsApi } from '@/lib/mockApi';
 import type { Goal, GoalFormData } from '@/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { useCreateGoal, useDeleteGoal, useGetGoals, useUpdateGoal } from '@/hooks/useGoals';
 
 const CATEGORY_COLORS = {
   Physical: 'bg-accent-teal',
@@ -304,130 +304,75 @@ const GoalForm = ({
 };
 
 export default function Goals() {
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'overdue'>('all');
 
-  useEffect(() => {
-    loadGoals();
-  }, []);
+  const { data: goals = [], isLoading } = useGetGoals();
 
-  const loadGoals = async () => {
-    try {
-      const response = await goalsApi.getAll();
-      if (response.success && response.data) {
-        setGoals(response.data);
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load goals. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+    const { mutate: createGoal, isPending: isCreating } = useCreateGoal();
+  const { mutate: updateGoal, isPending: isUpdating } = useUpdateGoal();
+  const { mutate: deleteGoal } = useDeleteGoal();
+
+    const handleFormSubmit = (formData: GoalFormData) => {
+    const mutationOptions = {
+        onSuccess: () => {
+            toast({ title: editingGoal ? "Goal Updated" : "Goal Created" });
+            setIsFormOpen(false);
+            setEditingGoal(null);
+        },
+        onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    };
+
+    if (editingGoal) {
+      updateGoal({ goalId: editingGoal.id, data: formData }, mutationOptions);
+    } else {
+      createGoal(formData, mutationOptions);
     }
   };
 
-  const handleCreateGoal = async (goalData: GoalFormData) => {
-    setIsCreating(true);
-    try {
-      const response = await goalsApi.create(goalData);
-      if (response.success && response.data) {
-        setGoals(prev => [...prev, response.data!]);
-        setIsFormOpen(false);
-        toast({
-          title: "Goal Created",
-          description: "Your new goal has been created successfully!",
+  const handleDelete = (goalId: string) => {
+    deleteGoal(goalId, {
+      onSuccess: () => toast({ title: "Goal Deleted" }),
+      onError: (err) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    });
+  };
+
+    const handleUpdateProgress = (goalId: string, progress: number) => {
+    return new Promise<void>((resolve, reject) => {
+        updateGoal({ goalId, data: { progress } }, {
+            onSuccess: () => resolve(),
+            onError: (err) => reject(err),
         });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create goal. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCreating(false);
-    }
+    });
   };
 
-  const handleUpdateGoal = async (goalData: GoalFormData) => {
-    if (!editingGoal) return;
+
+
+  const { filteredGoals, stats } = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const filtered = goals.filter(goal => {
+        const deadlineDate = new Date(goal.deadline);
+        switch (filter) {
+            case 'active': return !goal.isCompleted && deadlineDate >= today;
+            case 'completed': return goal.isCompleted;
+            case 'overdue': return !goal.isCompleted && deadlineDate < today;
+            default: return true;
+        }
+    });
+
+    const calculatedStats = {
+        total: goals.length,
+        completed: goals.filter(g => g.isCompleted).length,
+        active: goals.filter(g => !g.isCompleted && new Date(g.deadline) >= today).length,
+        overdue: goals.filter(g => !g.isCompleted && new Date(g.deadline) < today).length
+    };
     
-    setIsCreating(true);
-    try {
-      const response = await goalsApi.update(editingGoal.id, goalData);
-      if (response.success && response.data) {
-        setGoals(prev => prev.map(g => g.id === editingGoal.id ? response.data! : g));
-        setEditingGoal(null);
-        setIsFormOpen(false);
-        toast({
-          title: "Goal Updated",
-          description: "Your goal has been updated successfully!",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update goal. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCreating(false);
-    }
-  };
+    return { filteredGoals: filtered, stats: calculatedStats };
+  }, [goals, filter]);
 
-  const handleDeleteGoal = async (goalId: string) => {
-    try {
-      await goalsApi.delete(goalId);
-      setGoals(prev => prev.filter(g => g.id !== goalId));
-      toast({
-        title: "Goal Deleted",
-        description: "Goal has been removed successfully.",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete goal. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleUpdateProgress = async (goalId: string, progress: number) => {
-    try {
-      const response = await goalsApi.update(goalId, { progress });
-      if (response.success && response.data) {
-        setGoals(prev => prev.map(g => g.id === goalId ? response.data! : g));
-      }
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const filteredGoals = goals.filter(goal => {
-    switch (filter) {
-      case 'active':
-        return !goal.isCompleted && new Date(goal.deadline) >= new Date();
-      case 'completed':
-        return goal.isCompleted;
-      case 'overdue':
-        return !goal.isCompleted && new Date(goal.deadline) < new Date();
-      default:
-        return true;
-    }
-  });
-
-  const stats = {
-    total: goals.length,
-    completed: goals.filter(g => g.isCompleted).length,
-    active: goals.filter(g => !g.isCompleted && new Date(g.deadline) >= new Date()).length,
-    overdue: goals.filter(g => !g.isCompleted && new Date(g.deadline) < new Date()).length
-  };
 
   if (isLoading) {
     return (
@@ -464,170 +409,58 @@ export default function Goals() {
           </p>
         </div>
         
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button className="btn-glow gradient-primary" onClick={() => setEditingGoal(null)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Goal
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {editingGoal ? 'Edit Goal' : 'Create New Goal'}
-              </DialogTitle>
-              <DialogDescription>
-                {editingGoal 
-                  ? 'Update your goal details and track your progress.' 
-                  : 'Set a new long-term goal to work towards.'
-                }
-              </DialogDescription>
-            </DialogHeader>
-            <GoalForm
-              goal={editingGoal || undefined}
-              onSubmit={editingGoal ? handleUpdateGoal : handleCreateGoal}
-              onCancel={() => {
-                setIsFormOpen(false);
-                setEditingGoal(null);
-              }}
-              isLoading={isCreating}
-            />
-          </DialogContent>
-        </Dialog>
+         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+                <Button className="btn-glow gradient-primary" onClick={() => setEditingGoal(null)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Goal
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>{editingGoal ? 'Edit Goal' : 'Create New Goal'}</DialogTitle>
+                </DialogHeader>
+                <GoalForm
+                    goal={editingGoal || undefined}
+                    onSubmit={handleFormSubmit}
+                    onCancel={() => { setIsFormOpen(false); setEditingGoal(null); }}
+                    isLoading={isCreating || isUpdating}
+                />
+            </DialogContent>
+            </Dialog>
       </div>
 
       {/* Stats Overview */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="card-hover">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Target className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.total}</p>
-                <p className="text-sm text-muted-foreground">Total Goals</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="card-hover">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-success/10">
-                <CheckCircle2 className="h-5 w-5 text-success" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-success">{stats.completed}</p>
-                <p className="text-sm text-muted-foreground">Completed</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="card-hover">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-accent-teal/10">
-                <Clock className="h-5 w-5 text-accent-teal" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-accent-teal">{stats.active}</p>
-                <p className="text-sm text-muted-foreground">In Progress</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="card-hover">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-destructive/10">
-                <AlertCircle className="h-5 w-5 text-destructive" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-destructive">{stats.overdue}</p>
-                <p className="text-sm text-muted-foreground">Overdue</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <Card className="card-hover"><CardContent className="p-6"><p className="text-2xl font-bold">{stats.total}</p><p>Total Goals</p></CardContent></Card>
+            <Card className="card-hover"><CardContent className="p-6"><p className="text-2xl font-bold text-success">{stats.completed}</p><p>Completed</p></CardContent></Card>
+            <Card className="card-hover"><CardContent className="p-6"><p className="text-2xl font-bold text-accent-teal">{stats.active}</p><p>In Progress</p></CardContent></Card>
+            <Card className="card-hover"><CardContent className="p-6"><p className="text-2xl font-bold text-destructive">{stats.overdue}</p><p>Overdue</p></CardContent></Card>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex gap-2">
-        <Button
-          variant={filter === 'all' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('all')}
-        >
-          All ({stats.total})
-        </Button>
-        <Button
-          variant={filter === 'active' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('active')}
-        >
-          Active ({stats.active})
-        </Button>
-        <Button
-          variant={filter === 'completed' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('completed')}
-        >
-          Completed ({stats.completed})
-        </Button>
-        <Button
-          variant={filter === 'overdue' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('overdue')}
-        >
-          Overdue ({stats.overdue})
-        </Button>
-      </div>
-
-      {/* Goals Grid */}
-      {filteredGoals.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredGoals.map((goal) => (
-            <GoalCard
-              key={goal.id}
-              goal={goal}
-              onEdit={(goal) => {
-                setEditingGoal(goal);
-                setIsFormOpen(true);
-              }}
-              onDelete={handleDeleteGoal}
-              onUpdateProgress={handleUpdateProgress}
-            />
-          ))}
+     <div className="flex gap-2">
+            <Button variant={filter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('all')}>All ({stats.total})</Button>
+            <Button variant={filter === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('active')}>Active ({stats.active})</Button>
+            <Button variant={filter === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('completed')}>Completed ({stats.completed})</Button>
+            <Button variant={filter === 'overdue' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('overdue')}>Overdue ({stats.overdue})</Button>
         </div>
-      ) : (
-        <Card className="py-12">
-          <CardContent className="text-center">
-            <Trophy className="h-16 w-16 mx-auto text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">
-              {filter === 'all' ? 'No goals yet' : `No ${filter} goals`}
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              {filter === 'all' 
-                ? 'Create your first goal to start tracking your long-term progress.'
-                : `You don't have any ${filter} goals at the moment.`
-              }
-            </p>
-            {filter === 'all' && (
-              <Button 
-                className="btn-glow"
-                onClick={() => setIsFormOpen(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Create Your First Goal
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
+
+      {filteredGoals.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredGoals.map((goal) => (
+                <GoalCard
+                key={goal.id}
+                goal={goal}
+                onEdit={(g) => { setEditingGoal(g); setIsFormOpen(true); }}
+                onDelete={handleDelete}
+                onUpdateProgress={handleUpdateProgress}
+                />
+            ))}
+            </div>
+        ) : (
+            <Card className="py-12"><CardContent className="text-center"><p>No {filter} goals.</p></CardContent></Card>
+        )}
     </div>
   );
 }

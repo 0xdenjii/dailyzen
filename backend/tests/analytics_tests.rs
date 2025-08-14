@@ -22,13 +22,13 @@ async fn get_analytics_returns_correctly_aggregated_data() {
     let physical_tasks: Vec<_> = (0..5).map(|i| {
         let name = PHYSICAL_TASK_NAMES.choose(&mut rng).unwrap();
         
-        json!({"name": name, "points": rng.random_range(5..=20), "category": "Physical", "is_mandatory": i < 2})
+        json!({"name": name, "points": rng.random_range(5..=20), "category": "Physical", "isMandatory": i < 2})
     }).collect();
     
     let mental_tasks: Vec<_> = (0..5).map(|i| {
         let name = MENTAL_TASK_NAMES.choose(&mut rng).unwrap();
         
-        json!({"name": name, "points": rng.random_range(5..=20), "category": "Mental", "is_mandatory": i < 2})
+        json!({"name": name, "points": rng.random_range(5..=20), "category": "Mental", "isMandatory": i < 2})
     }).collect();
 
     let mut all_tasks = Vec::new();
