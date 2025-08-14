@@ -1,6 +1,10 @@
 import { AuthToken } from "./auth"; // We will create this in Phase 1
 
-const BASE_URL = "/api"; // Using the proxy
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+if (!BASE_URL) {
+  throw new Error("VITE_API_BASE_URL is not defined. Please check your .env files.");
+}
+
 
 // Define a custom error class for API errors
 export class ApiError extends Error {
